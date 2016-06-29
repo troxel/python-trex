@@ -11,6 +11,12 @@ pp = pprint.PrettyPrinter(indent=4)
 
 class TemplateRex:
     
+    template_dirs = ["./", "./templates"]
+    
+    cmnt_prefix = '<!--'
+    cmnt_postfix = '-->'
+    func_prefix = '&'
+        
        # ----------------------
     def __init__(self, **args):
 
@@ -18,17 +24,13 @@ class TemplateRex:
         #    self.fname = args['fname']
         #else: raise Exception('fname arguement required')
 
-        self.template_dirs = ["./", "./templates"]
         self.cmnt_verbose = 1
         self.func_registered = {}
+
         self.tsections = {}                        # template sections
         self.psections = { 'main':"", 'base':""}   # processed sections
         self.csections = { 'main':[], 'base':[] }  # child sections
         self.last_parent = ['main']     # used to determine last found parent in recursive func
-
-        self.cmnt_prefix = '<!--'
-        self.cmnt_postfix = '-->'
-        self.func_prefix = '&'
 
         self.block_pattern = self.cmnt_prefix + r'\s*BEGIN name=(?P<nm>\w+)\s*' + self.cmnt_postfix + r'(?P<inner>.*?)' + self.cmnt_prefix + r'\s*END name=\1 ' + self.cmnt_postfix
         self.base_pattern  = self.cmnt_prefix + r'\s*BASE name=(?P<nm>\S+)\s*' + self.cmnt_postfix
@@ -106,10 +108,10 @@ class TemplateRex:
     # ----------------------
     def render_sec(self, section, context={}):
 
-        trex = Template(self.tsections[section])
+        tmpl = Template(self.tsections[section])
         context.update(self.psections)
 
-        self.psections[section] += trex.safe_substitute(context)
+        self.psections[section] = tmpl.safe_substitute(context)
 
         # Clear the child process sections making avaible for next use
         for child in self.csections[section]:
@@ -124,9 +126,13 @@ class TemplateRex:
     def render(self, context={}):
         """ render the main section and if base was used render that instead """
         if "base" in self.tsections:
-            return self.render_sec("base", context)
+            rtn = self.render_sec("base", context)
         else:
-            return self.render_sec("main", context)
+            rtn = self.render_sec("main", context)
+            
+        for sec in self.psections:
+            self.psections[sec] = ""
+        return rtn
 
     # ----------------------
     def subtitute_functions(self, section):
