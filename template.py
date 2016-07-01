@@ -28,7 +28,8 @@ class TemplateRex:
         self.func_registered = {}
 
         self.tsections = {}                        # template sections
-        self.psections = { 'main':"", 'base':""}   # processed sections
+        self.psections_str = { 'main':"", 'base':""}   # processed sections rendered str
+        self.psections_lst = { 'main':[], 'base':[]}   # processed sections as lst
         self.csections = { 'main':[], 'base':[] }  # child sections
         self.last_parent = ['main']     # used to determine last found parent in recursive func
 
@@ -70,9 +71,11 @@ class TemplateRex:
                     if match:
                         fname_base = match.group('nm')
                         # Save to 'base' as this is rendered in the final render if present
-                        self.tsections['base'] = self.load_template(fname_base)
+                        self.tsections['main'] = self.load_template(fname_base)
+                        self.tsections['main_child'] = self.process_template(file_str)
                         
-                    self.tsections['main'] = self.process_template(file_str)
+                    else:
+                        self.tsections['main'] = self.process_template(file_str)
                     
                     # if compile_flg marshal tsections to fspec_msh
 
@@ -99,7 +102,9 @@ class TemplateRex:
             self.csections[self.last_parent[-1]].append(name_sec)
 
             self.tsections[name_sec] = proc_rtn.rstrip()
-            self.psections[name_sec] = ""   # need to initialize to blank unrendered blocks
+            self.psections_str[name_sec] = ""   # need to initialize to blank unrendered blocks
+            self.psections_lst[name_sec] = []   # ...
+            
             return "$" + name_sec
 
         section = self.block_re.sub(process_capture, t_str, re.DOTALL)
@@ -108,19 +113,26 @@ class TemplateRex:
     # ----------------------
     def render_sec(self, section, context={}):
 
+        for child in self.csections[section]:
+            self.psections_str[child] = "".join(self.psections_lst[child])
+            self.psections_lst[child] = []
+        
         tmpl = Template(self.tsections[section])
-        context.update(self.psections)
+        context.update(self.psections_str)
 
-        self.psections[section] = tmpl.safe_substitute(context)
+        if section == 'main':
+            self.psections_str[section] = tmpl.safe_substitute(context)
+        else: 
+            self.psections_lst[section].append(tmpl.safe_substitute(context))
 
         # Clear the child process sections making avaible for next use
-        for child in self.csections[section]:
-            self.psections[child] = ""
+        #for child in self.csections[section]:
+        #    self.psections_str[child] = ""
 
         if self.func_registered:
             self.subtitute_functions(section)
 
-        return(self.psections[section])
+        return(self.psections_str[section])
 
     # ----------------------
     def render(self, context={}):
@@ -130,8 +142,8 @@ class TemplateRex:
         else:
             rtn = self.render_sec("main", context)
             
-        for sec in self.psections:
-            self.psections[sec] = ""
+        for sec in self.psections_str:
+            self.psections_str[sec] = ""
         return rtn
 
     # ----------------------
@@ -151,5 +163,5 @@ class TemplateRex:
 
             return rtn
 
-        self.psections[section] = self.func_re.sub(process_capture, self.psections[section], re.DOTALL)
+        self.psections_str[section] = self.func_re.sub(process_capture, self.psections_str[section], re.DOTALL)
 
