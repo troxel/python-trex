@@ -1,7 +1,7 @@
 import os
 import os.path
 import re
-from string import Template
+#from string import Template
 
 import fnmatch
 import pprint
@@ -16,6 +16,7 @@ class TemplateRex:
     cmnt_prefix = '<!--'
     cmnt_postfix = '-->'
     func_prefix = '&'
+    id_pattern  = r'\$({?[a-zA-Z][\w]+}?)'
         
        # ----------------------
     def __init__(self, **args):
@@ -36,9 +37,9 @@ class TemplateRex:
         self.block_pattern = self.cmnt_prefix + r'\s*BEGIN name=(?P<nm>\w+)\s*' + self.cmnt_postfix + r'(?P<inner>.*?)' + self.cmnt_prefix + r'\s*END name=\1 ' + self.cmnt_postfix
         self.base_pattern  = self.cmnt_prefix + r'\s*BASE name=(?P<nm>\S+)\s*' + self.cmnt_postfix
         self.func_pattern  = self.func_prefix + r'(?P<fn_nm>\S+)\((?P<fn_args>.*?)\)'
-
         self.block_re = re.compile(self.block_pattern, re.DOTALL)
         self.func_re  = re.compile(self.func_pattern)
+        self.id_re    = re.compile(self.id_pattern,re.DOTALL)
 
         for key in args.keys():
             self.__dict__[key] = args[key]
@@ -117,17 +118,12 @@ class TemplateRex:
             self.psections_str[child] = "".join(self.psections_lst[child])
             self.psections_lst[child] = []
         
-        tmpl = Template(self.tsections[section])
         context.update(self.psections_str)
 
         if section == 'main':
-            self.psections_str[section] = tmpl.safe_substitute(context)
+            self.psections_str[section] = self.subtitute_var(self.tsections[section],context)
         else: 
-            self.psections_lst[section].append(tmpl.safe_substitute(context))
-
-        # Clear the child process sections making avaible for next use
-        #for child in self.csections[section]:
-        #    self.psections_str[child] = ""
+            self.psections_lst[section].append( self.subtitute_var(self.tsections[section],context) ) 
 
         if self.func_registered:
             self.subtitute_functions(section)
@@ -136,15 +132,7 @@ class TemplateRex:
 
     # ----------------------
     def render(self, context={}):
-        """ render the main section and if base was used render that instead """
-        if "base" in self.tsections:
-            rtn = self.render_sec("base", context)
-        else:
-            rtn = self.render_sec("main", context)
-            
-        for sec in self.psections_str:
-            self.psections_str[sec] = ""
-        return rtn
+        return self.render_sec("main", context)
 
     # ----------------------
     def subtitute_functions(self, section):
@@ -164,4 +152,18 @@ class TemplateRex:
             return rtn
 
         self.psections_str[section] = self.func_re.sub(process_capture, self.psections_str[section], re.DOTALL)
+
+    # ----------------------
+    def subtitute_var(self, str_in, context):
+
+        def process_capture(obj):
+          
+            # Invariably somone will send non text... 
+            try: substitute = str(context[obj.group(1)])
+            except: substitute = "" 
+
+            return substitute
+
+        rtn = self.id_re.sub(process_capture, str_in, re.DOTALL)
+        return rtn
 
